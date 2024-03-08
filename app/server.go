@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"net"
 	"os"
-
 )
+
+const RESPONSE = "HTTP/1.1 200 OK\r\n\r\n"
 
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -19,9 +20,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, err = l.Accept()
+	Conn, err := l.Accept()
 	if err != nil {
 		fmt.Println("Error accepting connection: ", err.Error())
+		os.Exit(1)
+	}
+	_, err = Conn.Write([]byte(RESPONSE))
+	if err != nil {
+		fmt.Println("Error writing response: ", err.Error())
 		os.Exit(1)
 	}
 }
