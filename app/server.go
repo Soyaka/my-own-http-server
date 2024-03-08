@@ -4,9 +4,14 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
-const RESPONSE = "HTTP/1.1 200 OK\r\n\r\n"
+const (
+	RESPONSEOK = "HTTP/1.1 200 OK\r\n\r\n"
+	RESPONSEKO = "HTTP/1.1 404 Not Found\r\n\r\n"
+
+)
 
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -19,15 +24,20 @@ func main() {
 		fmt.Println("Failed to bind to port 4221")
 		os.Exit(1)
 	}
-
 	Conn, err := l.Accept()
 	if err != nil {
 		fmt.Println("Error accepting connection: ", err.Error())
 		os.Exit(1)
 	}
-	_, err = Conn.Write([]byte(RESPONSE))
-	if err != nil {
-		fmt.Println("Error writing response: ", err.Error())
+	buff := make([]byte, 1024)
+	_, err = Conn.Read(buff)
+	if err!= nil{
 		os.Exit(1)
 	}
+	if strings.Contains(string(buff), "GET / HTTP/1.1"){
+		Conn.Write([]byte(RESPONSEOK))
+	}else{
+		Conn.Write([]byte(RESPONSEKO))
+	}
+
 }
