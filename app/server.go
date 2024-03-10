@@ -17,21 +17,6 @@ const (
 	SEPARATOR     string = "\r\n"
 )
 
-func main() {
-	fmt.Println("Logs from your program will appear here!")
-	server := NewServer(HOST, PORT)
-	listner, err := net.Listen("tcp", server.Host+":"+server.Port)
-	if err != nil {
-		os.Exit(1)
-	}
-	responder := make(chan string)
-	go server.Run(listner, responder)
-	for msg := range responder {
-		fmt.Println(msg)
-	}
-
-}
-
 type server struct {
 	Host string
 	Port string
@@ -53,40 +38,49 @@ type request struct {
 	Host    string
 }
 
-func NewRequest(conn net.Conn) *request {
-	return &request{
-		Conn: conn,
+func main() {
+
+	fmt.Println("Logs from your program will appear here!")
+	server := NewServer(HOST, PORT)
+	listner, err := net.Listen("tcp", server.Host+":"+server.Port)
+	if err != nil {
+		os.Exit(1)
 	}
-}
-
-func (s *server) Run(listner net.Listener, reviser chan (string)) error {
-
 	for {
 		conn, err := listner.Accept()
 		if err != nil {
 			fmt.Println("can,t accept incomming connections", err)
-			reviser <- "err in accepting"
-
-		}
-		//
-		request := NewRequest(conn)
-		err = request.requestParser()
-		if err != nil {
-			fmt.Println("cant initialize new request or send response", err)
-			reviser <- "err in intialiser"
 			continue
 		}
-		if request.Body != "" {
-			err = request.SendResponse()
-			if err != nil {
-				fmt.Println("cant send response")
-				reviser <- "err in response"
-
-				continue
-			}
-		}
-		//defer conn.Close()
+		go server.Run(conn)
 	}
+
+}
+
+func NewRequest(conn *net.Conn) *request {
+	return &request{
+		Conn: *conn,
+	}
+}
+
+func (s *server) Run(conn net.Conn) error {
+	defer conn.Close()
+
+	request := NewRequest(&conn)
+	err := request.requestParser()
+	if err != nil {
+		fmt.Println("cant initialize new request or send response", err)
+
+		return err
+	}
+	if request.Body != "" {
+		err = request.SendResponse()
+		if err != nil {
+			fmt.Println("cant send response")
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *request) requestParser() error {
