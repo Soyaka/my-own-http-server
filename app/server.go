@@ -8,13 +8,13 @@ import (
 )
 
 const (
-	HOST          = "0.0.0.0"
-	PORT          = "4221"
-	ContentType   = "Content-Type"
-	ContentLength = "Content-Length"
-	Ok            = "HTTP/1.1 200 OK"
-	KO            = "HTTP/1.1 404 Not Found"
-	SEPARATOR     = "\r\n"
+	HOST          string = "0.0.0.0"
+	PORT          string = "4221"
+	ContentType   string = "Content-Type"
+	ContentLength string = "Content-Length"
+	Ok            string = "HTTP/1.1 200 OK"
+	KO            string = "HTTP/1.1 404 Not Found"
+	SEPARATOR     string = "\r\n"
 )
 
 func main() {
@@ -63,8 +63,7 @@ type request struct {
 	Version string
 	Body    string
 	Conn    net.Conn
-	//userAgent string
-	Host string
+	Host    string
 }
 
 func NewRequest(conn net.Conn) *request {
@@ -93,6 +92,12 @@ func (r *request) requestParser() error {
 		r.Version = "HTTP/1.1"
 		r.Body = KO + SEPARATOR + SEPARATOR
 		return nil
+	} else if strings.Contains(verbs[0], "GET /user-agent HTTP/1.1") {
+		head := strings.Split(verbs[2], " ")
+		if strings.Contains(head[0], "User-Agent:") {
+			body := head[1]
+			r.Body = ResponseMaker(body)
+		}
 	} else if strings.Contains(verbs[0], "GET /echo") {
 		head := strings.Split(verbs[0], " ")
 		r.Method = head[0]
@@ -100,7 +105,7 @@ func (r *request) requestParser() error {
 		r.Version = head[2]
 		pathBody := strings.Split(head[1], "/")
 		body := strings.Join(pathBody[2:], "/")
-		r.Body = Ok + SEPARATOR + ContentType + ":" + "text/plain" + SEPARATOR + ContentLength + ":" + fmt.Sprintf("%d", len(body)) + SEPARATOR + SEPARATOR + body
+		r.Body = ResponseMaker(body)
 	} else {
 		r.Body = KO + SEPARATOR + SEPARATOR
 	}
@@ -113,4 +118,8 @@ func (r *request) SendResponse() error {
 		return err
 	}
 	return nil
+}
+
+func ResponseMaker(respBody string) string {
+	return Ok + SEPARATOR + ContentType + ":" + "text/plain" + SEPARATOR + ContentLength + ":" + fmt.Sprintf("%d", len(respBody)) + SEPARATOR + SEPARATOR + respBody
 }
