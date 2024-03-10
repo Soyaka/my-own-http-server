@@ -15,6 +15,9 @@ const (
 	Ok            string = "HTTP/1.1 200 OK"
 	KO            string = "HTTP/1.1 404 Not Found"
 	SEPARATOR     string = "\r\n"
+	OCT           string = "application/octet-stream"
+	TXT           string = "text/plain"
+	SLASH         string = "/"
 )
 
 type server struct {
@@ -27,6 +30,12 @@ func NewServer(host, port string) *server {
 		Host: host,
 		Port: port,
 	}
+}
+
+type file struct {
+	Dir     string
+	Name    string
+	Content string
 }
 
 type request struct {
@@ -65,7 +74,6 @@ func NewRequest(conn *net.Conn) *request {
 
 func (s *server) Run(conn net.Conn) error {
 	defer conn.Close()
-
 	request := NewRequest(&conn)
 	err := request.requestParser()
 	if err != nil {
@@ -82,6 +90,33 @@ func (s *server) Run(conn net.Conn) error {
 	}
 	return nil
 }
+
+//file section
+
+func NewFile() *file {
+	return &file{}
+}
+
+func flagCheck() bool {
+	if len(os.Args) > 2 {
+		switch strings.ToLower(os.Args[1]) {
+		case "--directory":
+			return true
+		}
+	}
+	return false
+}
+
+func SetFileDir() string {
+	return os.Args[2]
+}
+
+func CheckFileExist(file *file) bool {
+	_, err := os.Stat(file.Dir + string(os.PathSeparator) + file.Name)
+	return err == nil
+}
+
+//end file section
 
 func (r *request) requestParser() error {
 	buff := make([]byte, 1024)
@@ -108,7 +143,7 @@ func (r *request) requestParser() error {
 		if strings.Contains(head[0], "User-Agent:") {
 			body := strings.Join(head[1:], "")
 			if body != "" {
-				r.Body = ResponseMaker(body)
+				r.Body = ResponseMaker(body, TXT)
 
 			} else {
 				r.Body = KO + SEPARATOR + SEPARATOR
@@ -123,7 +158,34 @@ func (r *request) requestParser() error {
 		r.Version = head[2]
 		pathBody := strings.Split(head[1], "/")
 		body := strings.Join(pathBody[2:], "/")
-		r.Body = ResponseMaker(body)
+		r.Body = ResponseMaker(body, TXT)
+	} else if strings.Contains(verbs[0], "GET /files/") {
+		head := strings.Split(verbs[0], " ")
+		r.Method = head[0]
+		r.Path = head[1]
+		r.Version = head[2]
+		pathBody := strings.Split(head[1], "/")
+		filePath := strings.Join(pathBody[2:], "/")
+		if flagCheck() {
+			// The if Triangle hell stars Here
+			file := NewFile()
+			file.Dir = SetFileDir()
+			file.Name = filePath
+			if CheckFileExist(file) {
+				data, err := os.ReadFile(file.Dir + string(os.PathSeparator) + file.Name)
+				if err != nil {
+					r.Body = KO + SEPARATOR + SEPARATOR
+				}
+				r.Body = ResponseMaker(string(data), OCT)
+				fmt.Println(r.Body)
+
+			} else {
+				r.Body = KO + SEPARATOR + SEPARATOR
+			}
+		} else {
+			r.Body = KO + SEPARATOR + SEPARATOR
+		}
+
 	} else {
 		r.Body = KO + SEPARATOR + SEPARATOR
 	}
@@ -138,6 +200,6 @@ func (r *request) SendResponse() error {
 	return nil
 }
 
-func ResponseMaker(respBody string) string {
-	return Ok + SEPARATOR + ContentType + ":" + "text/plain" + SEPARATOR + ContentLength + ":" + fmt.Sprintf("%d", len(respBody)) + SEPARATOR + SEPARATOR + respBody
+func ResponseMaker(respBody string, format string) string {
+	return Ok + SEPARATOR + ContentType + ":" + format + SEPARATOR + ContentLength + ":" + fmt.Sprintf("%d", len(respBody)) + SEPARATOR + SEPARATOR + respBody
 }
