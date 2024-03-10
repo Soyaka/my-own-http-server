@@ -24,25 +24,12 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
-
-	for {
-		conn, err := listner.Accept()
-		if err != nil {
-			fmt.Println("can,t accept incomming connections", err)
-			os.Exit(1)
-		}
-		request := NewRequest(conn)
-		err = request.requestParser()
-		if err != nil {
-			fmt.Println("cant initialize new request or send response", err)
-		}
-		err = request.SendResponse()
-		if err != nil {
-			fmt.Println("cant send response")
-			os.Exit(1)
-		}
-		conn.Close()
+	responder := make(chan string)
+	go server.Run(listner, responder)
+	for msg := range responder {
+		fmt.Println(msg)
 	}
+
 }
 
 type server struct {
@@ -72,6 +59,36 @@ func NewRequest(conn net.Conn) *request {
 	}
 }
 
+func (s *server) Run(listner net.Listener, reviser chan (string)) error {
+
+	for {
+		conn, err := listner.Accept()
+		if err != nil {
+			fmt.Println("can,t accept incomming connections", err)
+			reviser <- "err in accepting"
+
+		}
+		//
+		request := NewRequest(conn)
+		err = request.requestParser()
+		if err != nil {
+			fmt.Println("cant initialize new request or send response", err)
+			reviser <- "err in intialiser"
+			continue
+		}
+		if request.Body != "" {
+			err = request.SendResponse()
+			if err != nil {
+				fmt.Println("cant send response")
+				reviser <- "err in response"
+
+				continue
+			}
+		}
+		//defer conn.Close()
+	}
+}
+
 func (r *request) requestParser() error {
 	buff := make([]byte, 1024)
 	_, err := r.Conn.Read(buff)
@@ -92,11 +109,18 @@ func (r *request) requestParser() error {
 		r.Version = "HTTP/1.1"
 		r.Body = KO + SEPARATOR + SEPARATOR
 		return nil
-	} else if strings.Contains(verbs[0], "GET /user-agent HTTP/1.1") {
+	} else if strings.Contains(verbs[0], "GET /user-agent") {
 		head := strings.Split(verbs[2], " ")
 		if strings.Contains(head[0], "User-Agent:") {
-			body := head[1]
-			r.Body = ResponseMaker(body)
+			body := strings.Join(head[1:], "")
+			if body != "" {
+				r.Body = ResponseMaker(body)
+
+			} else {
+				r.Body = KO + SEPARATOR + SEPARATOR
+			}
+		} else {
+			r.Body = KO + SEPARATOR + SEPARATOR
 		}
 	} else if strings.Contains(verbs[0], "GET /echo") {
 		head := strings.Split(verbs[0], " ")
