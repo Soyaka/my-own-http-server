@@ -1,10 +1,12 @@
 package main
 
+//FIXME: Refactor the code inside General Fuctions And Create Appropriate handlers!!
 import (
 	"fmt"
 	"net"
 	"os"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -13,11 +15,13 @@ const (
 	ContentType   string = "Content-Type"
 	ContentLength string = "Content-Length"
 	Ok            string = "HTTP/1.1 200 OK"
-	KO            string = "HTTP/1.1 404 Not Found"
-	SEPARATOR     string = "\r\n"
-	OCT           string = "application/octet-stream"
-	TXT           string = "text/plain"
-	SLASH         string = "/"
+	CREATED       string = "HTTP/1.1 201 OK"
+
+	KO        string = "HTTP/1.1 404 Not Found"
+	SEPARATOR string = "\r\n"
+	OCT       string = "application/octet-stream"
+	TXT       string = "text/plain"
+	SLASH     string = "/"
 )
 
 type server struct {
@@ -35,7 +39,7 @@ func NewServer(host, port string) *server {
 type file struct {
 	Dir     string
 	Name    string
-	Content string
+	Content []byte
 }
 
 type request struct {
@@ -143,7 +147,7 @@ func (r *request) requestParser() error {
 		if strings.Contains(head[0], "User-Agent:") {
 			body := strings.Join(head[1:], "")
 			if body != "" {
-				r.Body = ResponseMaker(body, TXT)
+				r.Body = ResponseMaker(Ok, body, TXT)
 
 			} else {
 				r.Body = KO + SEPARATOR + SEPARATOR
@@ -158,7 +162,7 @@ func (r *request) requestParser() error {
 		r.Version = head[2]
 		pathBody := strings.Split(head[1], "/")
 		body := strings.Join(pathBody[2:], "/")
-		r.Body = ResponseMaker(body, TXT)
+		r.Body = ResponseMaker(Ok, body, TXT)
 	} else if strings.Contains(verbs[0], "GET /files/") {
 		head := strings.Split(verbs[0], " ")
 		r.Method = head[0]
@@ -176,7 +180,7 @@ func (r *request) requestParser() error {
 				if err != nil {
 					r.Body = KO + SEPARATOR + SEPARATOR
 				}
-				r.Body = ResponseMaker(string(data), OCT)
+				r.Body = ResponseMaker(Ok, string(data), OCT)
 				fmt.Println(r.Body)
 
 			} else {
@@ -185,6 +189,28 @@ func (r *request) requestParser() error {
 		} else {
 			r.Body = KO + SEPARATOR + SEPARATOR
 		}
+
+	} else if strings.Contains(verbs[0], "POST /files/") {
+		file := NewFile()
+		body := strings.Split(string(buff), SEPARATOR+SEPARATOR)
+		content := removeEmptyChars(body[1])
+		file.Content=  []byte(content)
+		head := strings.Split(verbs[0], " ")
+		r.Method = head[0]
+		r.Path = head[1]
+		r.Version = head[2]
+		pathBody := strings.Split(head[1], "/")
+		filePath := strings.Join(pathBody[2:], "/")
+		fullFilePath := SetFileDir() + string(os.PathSeparator) + filePath
+		f, err := os.Create(fullFilePath)
+		if err != nil {
+			r.Body = KO + SEPARATOR + SEPARATOR
+		}
+		_, err = f.Write(file.Content)
+		if err != nil {
+			r.Body = KO + SEPARATOR + SEPARATOR
+		}
+		r.Body = ResponseMaker(CREATED, "", TXT)
 
 	} else {
 		r.Body = KO + SEPARATOR + SEPARATOR
@@ -200,6 +226,17 @@ func (r *request) SendResponse() error {
 	return nil
 }
 
-func ResponseMaker(respBody string, format string) string {
-	return Ok + SEPARATOR + ContentType + ":" + format + SEPARATOR + ContentLength + ":" + fmt.Sprintf("%d", len(respBody)) + SEPARATOR + SEPARATOR + respBody
+func ResponseMaker(status, respBody, format string) string {
+	return status + SEPARATOR + ContentType + ":" + format + SEPARATOR + ContentLength + ":" + fmt.Sprintf("%d", len(respBody)) + SEPARATOR + SEPARATOR + respBody
 }
+
+func removeEmptyChars(input string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsPrint(r) || unicode.IsSpace(r) {
+			return r
+		}
+		return -1
+	}, input)
+}
+
+//challenge completed!
